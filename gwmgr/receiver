@@ -5,7 +5,7 @@ GITHOME="/home/$GITUSER"
 SELF=`which $0`
 
 load_target_ip() {
-    TARGET_IP=$(etcdctl get "/router/$RECEIVE_REPO")
+    TARGET_IP=$(etcdctl get "/apps/$RECEIVE_REPO")
 
     if [ $? -ne 0 ]; then
         echo $'\e[1G\e[K'"-----> WARNING: deploy did not complete, no target dokku instance for $APP"
@@ -33,6 +33,7 @@ case "$1" in
         export RECEIVE_REPO="$(echo $SSH_ORIGINAL_COMMAND | awk '{print $2}' | perl -pe 's/(?<!\\)'\''//g' | sed 's/\\'\''/'\''/g')"
         load_target_ip
 
+        rm -fr $REPO_PATH
         ssh -i /home/git/.ssh/id_rsa -o StrictHostKeyChecking=no dokku@$TARGET_IP $SSH_ORIGINAL_COMMAND
 
         REPO_PATH="$GITHOME/$RECEIVE_REPO"
@@ -48,9 +49,6 @@ case "$1" in
 cat | $SELF hook
 EOF
         chmod +x $PRERECEIVE_HOOK
-        git-shell -c "$SSH_ORIGINAL_COMMAND"
-
-
         ;;
 
     hook)
@@ -71,7 +69,6 @@ EOF
         }
 
         load_target_ip
-
         while read oldrev newrev refname
         do
             # Only run this script for the master branch. You can remove this
@@ -84,7 +81,6 @@ EOF
             fi
 
         done
-        #exit 1 # for debugging
         ;;
 
     *)

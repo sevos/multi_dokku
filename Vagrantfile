@@ -17,6 +17,14 @@ Vagrant.configure("2") do |config|
       cp etcd etcdctl /usr/local/bin/
       cd /root
 
+      add-apt-repository -y ppa:chris-lea/node.js
+      apt-get update && apt-get install -y nodejs
+      git clone https://github.com/coreos/etcd.git /root/etcd
+      cd /root/etcd/mod/dashboard
+      npm install bower grunt -g
+      echo "n" | bower install --allow-root
+
+
       mkdir -p /var/lib/etcd
       ln -sf /vagrant/shared/etcd.conf /etc/init/etcd.conf
       ln -sf /vagrant/shared/gwmgr.conf /etc/init/gwmgr.conf

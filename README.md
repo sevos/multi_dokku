@@ -25,6 +25,9 @@ After loooooonger while you will have 3 machines configured:
 
 You can access etcd dashboard at http://192.168.50.2:4001/mod/dashboard
 
+You need add your public ssh key to etcd in `/deployers` directory. The key stands
+for user name and value should contain plain text public ssh key.
+
 # Deploying an app
 
 Before pushing application you need to configure router for it. Head to

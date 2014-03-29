@@ -1,0 +1,17 @@
+GIT
+  remote: https://github.com/ranjib/etcd-ruby.git
+  revision: 3a86193bbf60c9cb68a8a2da58030b7ee4b87877
+  specs:
+    etcd (0.2.3)
+      mixlib-log
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    mixlib-log (1.6.0)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  etcd!

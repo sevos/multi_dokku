@@ -51,6 +51,8 @@ Vagrant.configure("2") do |config|
         wget -qO- https://raw.github.com/progrium/dokku/master/bootstrap.sh | sudo bash && \
         echo "#{DOMAIN}" > /home/dokku/VHOST
 
+        git clone https://github.com/statianzo/dokku-supervisord.git /var/lib/dokku/plugins/dokku-supervisord
+
         export DEBIAN_FRONTEND=noninteractive
         apt-get install -y ruby1.9.1
         gem install bundler

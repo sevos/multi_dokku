@@ -43,7 +43,7 @@ git clone https://github.com/heroku/node-js-sample.git
 cd node-js-sample
 ```
 
-Add remote of the server:
+Add remote:
 
 ```
 git remote add flokku git@flokku.dev:app1

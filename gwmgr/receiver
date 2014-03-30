@@ -3,87 +3,113 @@
 GITUSER=${GITUSER:-git}
 GITHOME="/home/$GITUSER"
 SELF=`which $0`
-
 load_target_ip() {
     TARGET_IP=$(etcdctl get "/apps/$RECEIVE_REPO")
 
     if [ $? -ne 0 ]; then
-        echo $'\e[1G\e[K'"-----> WARNING: deploy did not complete, no target dokku instance for $APP"
+        echo "WARNING: deploy did not complete, no target dokku instance for $RECEIVE_REPO" > /dev/stderr
+        echo "         Assign $RECEIVE_REPO to deploy server, i.e.:" > /dev/stderr
+        echo -e "" > /dev/stderr
+        echo "         ssh git@flokku.dev assign $RECEIVE_REPO 192.168.50.3" > /dev/stderr
+        echo -e "\n" > /dev/stderr
         exit 1
     fi
 }
 
-case "$1" in
-    # Public commands
-    upload-key) # sudo gitreceive upload-key <username>
-        KEY=$(cat)
-        FINGERPRINT=$(ssh-keygen -lf /dev/stdin <<< $(echo $KEY) | awk '{print $2}')
-        AUTHORIZED_KEYS=$GITHOME/.ssh/authorized_keys
-        # When this key is used, use the ssh 'forced command' feature to have 'gitreceive run' to run instead.
-        KEY_PREFIX="command=\"$SELF run $2 $FINGERPRINT\",no-agent-forwarding,no-pty,no-user-rc,no-X11-forwarding,no-port-forwarding"
-        echo "$KEY_PREFIX $KEY" >> $AUTHORIZED_KEYS
-        echo $FINGERPRINT
+case "$(echo $SSH_ORIGINAL_COMMAND | awk '{print $1}')" in
+    assign|destroy)
+        ARGS=$SSH_ORIGINAL_COMMAND
+        SSH_ORIGINAL_COMMAND=""
+        exec $SELF $ARGS
         ;;
-
-    # Internal commands
-    run)
-        export RECEIVE_USER=$2
-        export RECEIVE_FINGERPRINT=$3
-        # ssh provides the original requested command in $SSH_ORIGINAL_COMMAND
-        export RECEIVE_REPO="$(echo $SSH_ORIGINAL_COMMAND | awk '{print $2}' | perl -pe 's/(?<!\\)'\''//g' | sed 's/\\'\''/'\''/g')"
+    logs)
+        ARGS=$SSH_ORIGINAL_COMMAND
+        RECEIVE_REPO="$(echo $SSH_ORIGINAL_COMMAND | awk '{print $2}')"
+        SSH_ORIGINAL_COMMAND=""
         load_target_ip
+        exec ssh -i /home/git/.ssh/id_rsa -o StrictHostKeyChecking=no dokku@$TARGET_IP $ARGS
+        ;;
+    *)
 
-        rm -fr $REPO_PATH
-        ssh -i /home/git/.ssh/id_rsa -o StrictHostKeyChecking=no dokku@$TARGET_IP $SSH_ORIGINAL_COMMAND
+        case "$1" in
+            # Public commands
+            upload-key) # sudo gitreceive upload-key <username>
+                KEY=$(cat)
+                FINGERPRINT=$(ssh-keygen -lf /dev/stdin <<< $(echo $KEY) | awk '{print $2}')
+                AUTHORIZED_KEYS=$GITHOME/.ssh/authorized_keys
+                # When this key is used, use the ssh 'forced command' feature to have 'gitreceive run' to run instead.
+                KEY_PREFIX="command=\"$SELF run $2 $FINGERPRINT\",no-agent-forwarding,no-pty,no-user-rc,no-X11-forwarding,no-port-forwarding"
+                echo "$KEY_PREFIX $KEY" >> $AUTHORIZED_KEYS
+                echo $FINGERPRINT
+                ;;
+            assign)
+                echo -n "Assigning $2 to $3... "
+                etcdctl set /apps/$2 $3 > /dev/null && echo "done!"
+                ;;
+            destroy)
+                echo -n "Removing $2... "
+                etcdctl rm /apps/$2 > /dev/null && echo "done!" || echo "does not exist"
+                ;;
+            # Internal commands
+            run)
+                export RECEIVE_USER=$2
+                export RECEIVE_FINGERPRINT=$3
+                # ssh provides the original requested command in $SSH_ORIGINAL_COMMAND
+                export RECEIVE_REPO="$(echo $SSH_ORIGINAL_COMMAND | awk '{print $2}' | perl -pe 's/(?<!\\)'\''//g' | sed 's/\\'\''/'\''/g')"
+                load_target_ip
 
-        REPO_PATH="$GITHOME/$RECEIVE_REPO"
-        if [ ! -d $REPO_PATH ]; then
-            mkdir -p $REPO_PATH
-            cd $REPO_PATH
-            git init --bare > /dev/null
-        fi
-        cd $GITHOME
-        PRERECEIVE_HOOK="$REPO_PATH/hooks/pre-receive"
-        cat > $PRERECEIVE_HOOK <<EOF
+                rm -fr $REPO_PATH
+                ssh -i /home/git/.ssh/id_rsa -o StrictHostKeyChecking=no dokku@$TARGET_IP $SSH_ORIGINAL_COMMAND
+
+                REPO_PATH="$GITHOME/$RECEIVE_REPO"
+                if [ ! -d $REPO_PATH ]; then
+                    mkdir -p $REPO_PATH
+                    cd $REPO_PATH
+                    git init --bare > /dev/null
+                fi
+                cd $GITHOME
+                PRERECEIVE_HOOK="$REPO_PATH/hooks/pre-receive"
+                cat > $PRERECEIVE_HOOK <<EOF
 #!/bin/bash
 cat | $SELF hook
 EOF
-        chmod +x $PRERECEIVE_HOOK
-        ;;
+                chmod +x $PRERECEIVE_HOOK
+                ;;
 
-    hook)
-        git_archive_all() {
-            APP=$1; REV=$2
-            TMP_WORK_DIR=$(mktemp -d)
-            chmod 755 $TMP_WORK_DIR
-            unset GIT_DIR GIT_WORK_TREE
-            git clone $GITHOME/$APP $TMP_WORK_DIR > /dev/null
-            pushd $TMP_WORK_DIR > /dev/null
-            git config advice.detachedHead false
-            git checkout $REV > /dev/null
-            git submodule update --init --recursive > /dev/null
-            find -name .git -prune -exec rm -rf {} \; > /dev/null
-            tar c .
-            popd > /dev/null
-            rm -rf $TMP_WORK_DIR > /dev/null
-        }
+            hook)
+                git_archive_all() {
+                    APP=$1; REV=$2
+                    TMP_WORK_DIR=$(mktemp -d)
+                    chmod 755 $TMP_WORK_DIR
+                    unset GIT_DIR GIT_WORK_TREE
+                    git clone $GITHOME/$APP $TMP_WORK_DIR > /dev/null
+                    pushd $TMP_WORK_DIR > /dev/null
+                    git config advice.detachedHead false
+                    git checkout $REV > /dev/null
+                    git submodule update --init --recursive > /dev/null
+                    find -name .git -prune -exec rm -rf {} \; > /dev/null
+                    tar c .
+                    popd > /dev/null
+                    rm -rf $TMP_WORK_DIR > /dev/null
+                }
 
-        load_target_ip
-        while read oldrev newrev refname
-        do
-            # Only run this script for the master branch. You can remove this
-            # if block if you wish to run it for others as well.
-            if [[ $refname = "refs/heads/master" ]] ; then
-                git_archive_all $RECEIVE_REPO $newrev | ssh -i /home/git/.ssh/id_rsa -o StrictHostKeyChecking=no dokku@$TARGET_IP receive $RECEIVE_REPO | sed -u "s/^/"$'\e[1G'"/"
-            else
-                echo $'\e[1G\e[K'"-----> WARNING: deploy did not complete, you must push to master."
-                echo $'\e[1G\e[K'"-----> for example, try 'git push <dokku> ${refname/refs\/heads\/}:master'"
-            fi
+                load_target_ip
+                while read oldrev newrev refname
+                do
+                    # Only run this script for the master branch. You can remove this
+                    # if block if you wish to run it for others as well.
+                    if [[ $refname = "refs/heads/master" ]] ; then
+                        git_archive_all $RECEIVE_REPO $newrev | ssh -i /home/git/.ssh/id_rsa -o StrictHostKeyChecking=no dokku@$TARGET_IP receive $RECEIVE_REPO | sed -u "s/^/"$'\e[1G'"/"
+                    else
+                        echo $'\e[1G\e[K'"-----> WARNING: deploy did not complete, you must push to master."
+                        echo $'\e[1G\e[K'"-----> for example, try 'git push <dokku> ${refname/refs\/heads\/}:master'"
+                    fi
 
-        done
-        ;;
+                done
+                ;;
 
-    *)
-        echo "Usage: gitreceive <command> [options]"
-        ;;
+            *)
+                echo "Usage: gitreceive <command> [options]"
+                ;;
+        esac
 esac

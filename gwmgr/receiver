@@ -7,11 +7,11 @@ load_target_ip() {
     TARGET_IP=$(etcdctl get "/apps/$RECEIVE_REPO")
 
     if [ $? -ne 0 ]; then
-        echo "WARNING: deploy did not complete, no target dokku instance for $RECEIVE_REPO" > /dev/stderr
-        echo "         Assign $RECEIVE_REPO to deploy server, i.e.:" > /dev/stderr
-        echo -e "" > /dev/stderr
-        echo "         ssh git@flokku.dev assign $RECEIVE_REPO 192.168.50.3" > /dev/stderr
-        echo -e "\n" > /dev/stderr
+        echo $"WARNING: deploy did not complete, no target dokku instance for $RECEIVE_REPO"
+        echo $"         Assign $RECEIVE_REPO to deploy server, i.e.:"
+        echo $""
+        echo $"         ssh git@flokku.dev assign $RECEIVE_REPO 192.168.50.3"
+        echo $"\n"
         exit 1
     fi
 }
@@ -22,7 +22,7 @@ case "$(echo $SSH_ORIGINAL_COMMAND | awk '{print $1}')" in
         SSH_ORIGINAL_COMMAND=""
         exec $SELF $ARGS
         ;;
-    logs)
+    logs|config|config:set|config:get|config:unset|run)
         ARGS=$SSH_ORIGINAL_COMMAND
         RECEIVE_REPO="$(echo $SSH_ORIGINAL_COMMAND | awk '{print $2}')"
         SSH_ORIGINAL_COMMAND=""
